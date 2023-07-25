@@ -9,11 +9,16 @@ contract MultiSig {
     struct Transaction {
      address destination;
      uint256 value;
-     bool executed;   
+     bool executed;
+     bytes data;
     }
     
     mapping(uint256 => Transaction) public transactions;
     mapping(uint256 => mapping(address => bool)) public confirmations;
+
+    receive() payable external {
+        
+    }
 
     constructor(address[] memory _owners, uint256 _required) {
         require(_owners.length > 0);
@@ -23,23 +28,54 @@ contract MultiSig {
         required = _required;
     }
 
-    function addTransaction(address _destination, uint256 _value) public returns (uint256 transactionId) {
+    function addTransaction(address _destination, uint256 _value, bytes memory _data) internal returns (uint256 transactionId) {
         transactionId = transactionCount;
-        transactions[transactionCount] = Transaction(_destination, _value, false);
+        transactions[transactionCount] = Transaction(_destination, _value, false, _data);
         transactionCount += 1;
+        return transactionCount - 1;
     }
 
-    function confirmTransaction(uint256 transactionId) public {
-        confirmations[transactionId][msg.sender] = true;
+    function confirmTransaction(uint256 _transactionId) public {
+        require(Owner(msg.sender), "error");
+        confirmations[_transactionId][msg.sender] = true;
+        if(isConfirmed(_transactionId)) {
+            executeTransaction(_transactionId);
+        }
     }
 
-    function getConfirmationsCount(uint transactionId) public view returns(uint) {
+    function getConfirmationsCount(uint _transactionId) public view returns(uint) {
         uint count;
         for(uint i = 0; i < owners.length; i++) {
-            if(confirmations[transactionId][owners[i]]) {
+            if(confirmations[_transactionId][owners[i]]) {
                 count++;
             }
         }
         return count;
+    }
+
+    function Owner(address _wallet) private view returns(bool) {
+        for(uint i = 0; i < owners.length; i++) {
+            if(owners[i] == _wallet) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function submitTransaction(address _destination, uint _value, bytes memory _data) external {
+        uint transId = addTransaction(_destination, _value, _data);
+        confirmTransaction(transId);
+    }
+
+    function isConfirmed(uint256 _transactionId) public view returns(bool) {
+        return getConfirmationsCount(_transactionId) >= required;
+    }
+
+    function executeTransaction(uint256 _transactionId) public {
+        require(isConfirmed(_transactionId));
+        Transaction storage _tx = transactions[_transactionId];
+        (bool success, ) = _tx.destination.call{ value: _tx.value }(_tx.data);
+        require(success);
+        _tx.executed = true;
     }
 }
