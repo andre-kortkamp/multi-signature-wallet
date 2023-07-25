@@ -11,8 +11,9 @@ contract MultiSig {
      uint256 value;
      bool executed;   
     }
-
+    
     mapping(uint256 => Transaction) public transactions;
+    mapping(uint256 => mapping(address => bool)) public confirmations;
 
     constructor(address[] memory _owners, uint256 _required) {
         require(_owners.length > 0);
@@ -26,5 +27,19 @@ contract MultiSig {
         transactionId = transactionCount;
         transactions[transactionCount] = Transaction(_destination, _value, false);
         transactionCount += 1;
+    }
+
+    function confirmTransaction(uint256 transactionId) public {
+        confirmations[transactionId][msg.sender] = true;
+    }
+
+    function getConfirmationsCount(uint transactionId) public view returns(uint) {
+        uint count;
+        for(uint i = 0; i < owners.length; i++) {
+            if(confirmations[transactionId][owners[i]]) {
+                count++;
+            }
+        }
+        return count;
     }
 }
